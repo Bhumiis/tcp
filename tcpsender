@@ -1,0 +1,151 @@
+#include <winsock2.h>
+#include <iostream>
+#include <cstring>
+using namespace std;
+
+#define PORT 9909
+#define BUFFER_SIZE 1024    //buffer can hold up to 1024 bytes of data from the socket
+
+struct sockaddr_in srv;  //It’s a structure defined in  <winsock2.h> that represents an IPv4 address and port.
+
+fd_set fr,fw,fe;  // fd_set is a data structure used by the select() function to track multiple sockets (or file descriptors) for: Reading (fr) Writing (fw)  Exception (error) conditions (fe)
+
+int nMaxFd; // variable  used to store the maximum file descriptor (socket number) that you're tracking with select().
+int main()
+{
+    int nRet = 0;   // initialise the wsa variables
+    WSADATA wsaData;
+
+    // Step 1: Initialize WinSock
+    int result = WSAStartup(MAKEWORD(2,2),&wsaData);
+
+    if(result !=0)
+    {
+        cout<<"WSAStartup failed with error"<<result<<endl;
+        return 1;
+    }
+    else
+    {
+        cout<<"WSA initialised"<<endl;
+    }
+
+
+    // Step 2: Create TCP socket using IPv4.
+    int nSocket = socket(AF_INET,SOCK_STREAM,IPPROTO_TCP);
+    if(nSocket < 0)
+    {
+        cout << "The Socket not opened " << endl;
+        exit(EXIT_FAILURE);
+    }
+    else
+    {
+        cout<<"The Socket opened successfully"<<endl<<nSocket;
+    }
+
+
+    // Step 3: Bind
+    srv.sin_family = AF_INET;   // Address family (AF_INET for IPv4)
+    srv.sin_port = htons(PORT);  // Port number   htons() → Converts port number from host byte order to network byte order.
+
+    srv.sin_addr.s_addr = INADDR_ANY; // IP address
+    memset(&(srv.sin_zero),0,8);  // Unused; kept for alignment purposes.
+
+
+    nRet = bind(nSocket,(sockaddr*)&srv,sizeof(srv)); // bind nSocket to a specific IP address and port number
+    if(nRet<0)
+    {
+        cout<<endl<<"FAIL TO BIND to LOCAL port"<<endl;
+        exit(EXIT_FAILURE);
+    }
+    else
+    {
+        cout<<endl<<"SUCCESSFULLY  BIND to LOCAL port"<<endl;
+    }
+
+    // Step 4: Listen
+
+    nRet = listen(nSocket,5);
+    if(nRet<0)
+    {
+        cout << "Failed to start listening." << endl;
+        closesocket(nSocket);
+        WSACleanup();
+        return 1;
+
+    }
+    else
+    {
+        cout << "Server listening on port " << PORT << "..." << endl;
+    }
+    nMaxFd = nSocket;
+
+    // Step 5: Set up fd_set and infinite loop to accept multiple clients
+    while (true)
+    {
+        FD_ZERO(&fr);    // clear (initialize) the file descriptor sets.
+        FD_ZERO(&fw);    // clear (initialize) the file descriptor sets.
+        FD_ZERO(&fe);    // clear (initialize) the file descriptor sets.
+        FD_SET(nSocket, &fr); // adds the main server socket (nSocket) to the read set fr.
+
+        //Step 6: Set timeout
+        struct timeval tv;//struct timeval specifies a timeout for how long select() should wait for an event on a socket.
+
+        tv.tv_sec =10 ;  // 1 second timeout
+        tv.tv_usec = 0;//microseconds
+
+        // Step 7: Wait for activity using select
+        cout << "\nWaiting for client request..." << endl;
+        nRet = select(nMaxFd + 1, &fr, &fw, &fe, &tv);   //calls the select() function to monitor multiple sockets
+
+        if (nRet > 0)
+        {
+            if (FD_ISSET(nSocket, &fr)) //checks whether the socket is ready for reading
+            {
+                cout << "A client is trying to connect..." << endl;
+                sockaddr_in client;
+
+                int clientLen = sizeof(client);
+
+                SOCKET clientSocket = accept(nSocket, (sockaddr*)&client, &clientLen);
+                if (clientSocket != INVALID_SOCKET)
+                {
+                    cout << "Client connected successfully!" << endl;
+
+                    // Step 8: Receive message
+
+                    char buffer[BUFFER_SIZE] = {0};
+                    int bytesReceived = recv(clientSocket, buffer, BUFFER_SIZE, 0);
+                    if (bytesReceived > 0)
+                    {
+                        cout << "Message from client: " << string(buffer, bytesReceived) << endl;
+
+                        // Step 9: Send reply
+                        string reply = "Hello from server!";
+                        send(clientSocket, reply.c_str(), reply.length(), 0);
+                        cout << "Reply sent to client." << endl;
+                    }
+                    else
+                    {
+                        cout << "No message received or client disconnected." << endl;
+                    }
+
+                    closesocket(clientSocket); //CLOSE THE SOCKET
+                }
+            }
+        }
+        else if (nRet == 0)
+        {
+            cout << "No activity detected within timeout." << endl;
+        }
+        else
+        {
+            cout << "select() failed." << endl;
+        }
+    }
+    // Step 10: ClOSING THE SOCKET
+    closesocket(nSocket);
+
+    //SHUTDOWN WINSOCK
+    WSACleanup();
+    return 0;
+}
