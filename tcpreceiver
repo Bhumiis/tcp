@@ -1,0 +1,65 @@
+#include <winsock2.h>
+#include <iostream>
+using namespace std;
+
+#pragma comment(lib, "ws2_32.lib")  // Link the Winsock library
+
+#define SERVER_IP "127.0.0.1"       // Same machine (localhost)
+#define PORT 9909
+#define BUFFER_SIZE 1024
+
+int main() {
+    WSADATA wsaData;
+    int result;
+
+    // Step 1: Initialize Winsock
+    result = WSAStartup(MAKEWORD(2, 2), &wsaData);
+    if (result != 0) {
+        cout << "WSAStartup failed with error: " << result << endl;
+        return 1;
+    }
+
+    // Step 2: Create socket
+    SOCKET clientSocket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+    if (clientSocket == INVALID_SOCKET) {
+        cout << "Socket creation failed! Error: " << WSAGetLastError() << endl;
+        WSACleanup();
+        return 1;
+    }
+
+    // Step 3: Setup server address
+    sockaddr_in serverAddr;
+    serverAddr.sin_family = AF_INET;
+    serverAddr.sin_port = htons(PORT);
+    serverAddr.sin_addr.s_addr = inet_addr(SERVER_IP);
+
+    // Step 4: Connect to the server
+    result = connect(clientSocket, (sockaddr*)&serverAddr, sizeof(serverAddr));
+    if (result == SOCKET_ERROR) {
+        cout << "Connection failed! Error: " << WSAGetLastError() << endl;
+        closesocket(clientSocket);
+        WSACleanup();
+        return 1;
+    }
+
+    cout << "Connected to server!" << endl;
+
+    // Step 5: Send message to server
+    string message = "Hello from client!";
+    send(clientSocket, message.c_str(), message.length(), 0);
+    cout << "Message sent to server." << endl;
+
+    // Step 6: Receive reply from server
+    char buffer[BUFFER_SIZE] = {0};
+    int bytesReceived = recv(clientSocket, buffer, BUFFER_SIZE, 0);
+    if (bytesReceived > 0) {
+        cout << "Server replied: " << string(buffer, bytesReceived) << endl;
+    } else {
+        cout << "No reply received or connection closed." << endl;
+    }
+
+    // Step 7: Cleanup
+    closesocket(clientSocket);
+    WSACleanup();
+    return 0;
+}
